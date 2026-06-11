@@ -6,9 +6,6 @@ NapCat QQ 适配器 — 基于 OneBot v11 协议 (仅反向 WS 模式)
                       ↓ 反向 WebSocket (NapCat 主动连过来)
                  NapCat 适配器 (本文件)
 
-消息链路追踪:
-    每条消息分配 追踪ID，贯穿 接收→解析→去重→过滤→处理→发送 全流程
-    日志格式: [纳猫][追踪ID] 步骤描述
 """
 
 import asyncio
@@ -21,7 +18,6 @@ import re
 import time
 import tempfile
 import hmac
-import uuid
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -45,13 +41,9 @@ from gateway.platforms.helpers import MessageDeduplicator
 
 # ── 全局引用 (供外部工具调用) ──────────────────────────────────────────────
 _全局接口调用器: Optional["_OneBot接口调用器"] = None
-
-
 def 获取全局接口调用器() -> Optional["_OneBot接口调用器"]:
     """获取全局 OneBot 接口调用器实例。"""
     return _全局接口调用器
-
-
 def 检查依赖() -> bool:
     """检查运行时依赖是否可用。"""
     try:
@@ -59,13 +51,10 @@ def 检查依赖() -> bool:
         return True
     except ImportError:
         return False
-
-
 # ── 常量 ──────────────────────────────────────────────────────────────────
 消息最大长度 = 4500
 默认合并转发阈值 = 800
-表情回应ID列表 = [66, 76, 122, 124, 144, 147, 175, 180, 201, 282, 297]
-启用表情回应 = False
+表情回应ID列表 = [66,76,124,144,147,192,201,282,297]
 
 # ── 自动下载限制 ─────────────────────────────────────────────────────
 # 超过限制的媒体不下载，只保留 URL，Agent 需要时再下载
@@ -76,8 +65,6 @@ def 检查依赖() -> bool:
     "video": "10MB",
     "file": "10MB",
 }
-
-
 def 解析文件大小(值) -> int:
     """
     解析带单位的文件大小字符串为字节数。
@@ -106,12 +93,6 @@ def 解析文件大小(值) -> int:
         "G": 1024**3, "GB": 1024**3,
     }.get(单位, 0)
     return int(数字 * 倍率)
-
-
-def 生成追踪ID() -> str:
-    """生成8位追踪ID，用于日志链路追踪。"""
-    return uuid.uuid4().hex[:8]
-
 
 # ══════════════════════════════════════════════════════════════════════════
 # LRU 缓存 (防内存泄漏)
@@ -145,16 +126,12 @@ class 简易LRU缓存:
 
     def __len__(self) -> int:
         return len(self._缓存)
-
-
 # ══════════════════════════════════════════════════════════════════════════
 # 消息段构建 (OneBot v11 格式，发送方向)
 # ══════════════════════════════════════════════════════════════════════════
 
 def 构建文本段(文本: str) -> dict:
     return {"type": "text", "data": {"text": 文本}}
-
-
 def 构建图片段(地址: str) -> dict:
     """
     构建图片消息段。
@@ -163,28 +140,18 @@ def 构建图片段(地址: str) -> dict:
         return {"type": "image", "data": {"file": 地址}}
     地址 = 地址.lstrip("/")
     return {"type": "image", "data": {"file": f"file:///{地址}"}}
-
-
 def 构建语音段(地址: str) -> dict:
     """构建语音消息段 (type = 'record')。"""
     if 地址.startswith(("http://", "https://")):
         return {"type": "record", "data": {"file": 地址}}
     地址 = 地址.lstrip("/")
     return {"type": "record", "data": {"file": f"file:///{地址}"}}
-
-
 def 构建回复段(消息ID: str) -> dict:
     return {"type": "reply", "data": {"id": 消息ID}}
-
-
 def 构建艾特段(QQ号: str) -> dict:
     return {"type": "at", "data": {"qq": QQ号}}
-
-
 def 构建文件段(地址: str) -> dict:
     return {"type": "file", "data": {"file": 地址}}
-
-
 def 构建消息数组(
     文本: str,
     回复目标: Optional[str] = None,
@@ -213,6 +180,26 @@ def 构建消息数组(
     return 消息段
 
 
+def 文本转CQ码(文本: str, 附件列表: Optional[List[dict]] = None) -> str:
+    """
+    将文本和附件列表转换为 CQ 码字符串。
+    OneBot v11 同时支持段数组和 CQ 码字符串两种格式，这里统一用字符串。
+    """
+    部分 = []
+    if 文本.strip():
+        部分.append(文本)
+    for 附件 in (附件列表 or []):
+        路径 = 附件.get("path", "")
+        if not 路径:
+            continue
+        扩展名 = 路径.rsplit(".", 1)[-1].lower() if "." in 路径 else ""
+        if 扩展名 in ("png", "jpg", "jpeg", "gif", "webp"):
+            部分.append(f"[CQ:image,file=file:///{路径.lstrip('/')}]")
+        elif 扩展名 in ("ogg", "mp3", "wav", "amr", "silk"):
+            部分.append(f"[CQ:record,file=file:///{路径.lstrip('/')}]")
+        else:
+            部分.append(f"[CQ:file,file=file:///{路径.lstrip('/')}]")
+    return "".join(部分)
 # ══════════════════════════════════════════════════════════════════════════
 # 消息解析 (接收方向)
 # ══════════════════════════════════════════════════════════════════════════
@@ -237,8 +224,6 @@ def 从消息段提取文本(消息段列表: List[dict]) -> str:
         elif 段类型 == "face":
             部分.append("[表情]")
     return "".join(部分).strip()
-
-
 def 构建完整文本(消息段列表: List[dict], 媒体映射: dict) -> str:
     """
     从消息段数组构建完整可读文本。
@@ -303,8 +288,6 @@ def 构建完整文本(消息段列表: List[dict], 媒体映射: dict) -> str:
             continue  # reply 段单独处理
 
     return "".join(部分).strip()
-
-
 def 提取被艾特的QQ号(消息段列表: List[dict], 机器人QQ号: str) -> Optional[str]:
     """检查消息中是否 @了指定 QQ 号。"""
     for 段 in 消息段列表:
@@ -313,8 +296,6 @@ def 提取被艾特的QQ号(消息段列表: List[dict], 机器人QQ号: str) ->
             if str(QQ号) == 机器人QQ号:
                 return str(QQ号)
     return None
-
-
 # OneBot 接口调用器 (通过 WebSocket 发送 API 调用)
 # ══════════════════════════════════════════════════════════════════════════
 
@@ -378,19 +359,11 @@ class _OneBot接口调用器:
 
     # ── 常用 API 封装 ──────────────────────────────────────────────────
 
-    async def 发送私聊消息(self, 用户ID: str, 消息: list) -> dict:
+    async def 发送私聊消息(self, 用户ID: str, 消息) -> dict:
         return await self.调用("send_private_msg", {"user_id": int(用户ID), "message": 消息})
 
-    async def 发送群聊消息(self, 群ID: str, 消息: list) -> dict:
+    async def 发送群聊消息(self, 群ID: str, 消息) -> dict:
         return await self.调用("send_group_msg", {"group_id": int(群ID), "message": 消息})
-
-    async def 发送群聊CQ码(self, 群ID: str, CQ文本: str) -> dict:
-        """发送 CQ 码格式的原始消息（字符串形式，非段数组）。"""
-        return await self.调用("send_group_msg", {"group_id": int(群ID), "message": CQ文本})
-
-    async def 发送私聊CQ码(self, 用户ID: str, CQ文本: str) -> dict:
-        """发送 CQ 码格式的原始消息（字符串形式，非段数组）。"""
-        return await self.调用("send_private_msg", {"user_id": int(用户ID), "message": CQ文本})
 
     async def 获取群信息(self, 群ID: str) -> dict:
         return await self.调用("get_group_info", {"group_id": int(群ID)})
@@ -428,8 +401,6 @@ class _OneBot接口调用器:
 
     async def 戳一戳好友(self, 用户ID: str) -> dict:
         return await self.调用("friend_poke", {"user_id": int(用户ID)})
-
-
 # ══════════════════════════════════════════════════════════════════════════
 # 反向 WebSocket 服务端 (NapCat 主动连过来)
 # ══════════════════════════════════════════════════════════════════════════
@@ -460,12 +431,12 @@ class _反向WebSocket服务:
                         查询参数 = parse_qs(urlparse(ws.request.path).query)
                         提取的令牌 = 查询参数.get("access_token", [""])[0]
                     except Exception as e:
-                        日志.debug("[纳猫] 反向WS: 解析查询参数令牌失败: %s", e)
+                        日志.debug("反向WS: 解析查询参数令牌失败: %s", e)
                 if not hmac.compare_digest(提取的令牌, self._令牌):
                     await ws.close(1008, "认证失败")
                     return
 
-            日志.info("[纳猫] 反向WS客户端已连接: %s", ws.remote_address)
+            日志.info("反向WS客户端已连接: %s", ws.remote_address)
             self._当前连接 = ws
             self._接口调用器.设置连接(ws)
             global _全局接口调用器
@@ -483,15 +454,15 @@ class _反向WebSocket服务:
                         else:
                             await self._事件处理器(数据)
                     except json.JSONDecodeError:
-                        日志.debug("[纳猫] 反向WS: 非JSON消息: %s", 消息[:200])
+                        日志.debug("反向WS: 非JSON消息: %s", 消息[:200])
                     except Exception as e:
-                        日志.error("[纳猫] 反向WS事件处理错误: %s", e, exc_info=True)
+                        日志.error("反向WS事件处理错误: %s", e, exc_info=True)
             except websockets.ConnectionClosed as e:
-                日志.warning("[纳猫] 反向WS连接关闭: code=%s reason=%s", e.code, e.reason)
+                日志.warning("反向WS连接关闭: code=%s reason=%s", e.code, e.reason)
             except Exception as e:
-                日志.error("[纳猫] 反向WS处理错误: %s", e, exc_info=True)
+                日志.error("反向WS处理错误: %s", e, exc_info=True)
             finally:
-                日志.info("[纳猫] 反向WS客户端已断开")
+                日志.info("反向WS客户端已断开")
                 # 只在当前连接确实是自己的时候才清空，防止旧连接断开覆盖新连接
                 if self._当前连接 is ws:
                     self._当前连接 = None
@@ -502,7 +473,7 @@ class _反向WebSocket服务:
             ping_interval=20,
             ping_timeout=20,
         )
-        日志.info("[纳猫] 反向WS服务端启动: ws://%s:%s", 主机, 端口)
+        日志.info("反向WS服务端启动: ws://%s:%s", 主机, 端口)
 
     async def 停止(self):
         if self._当前连接:
@@ -513,8 +484,6 @@ class _反向WebSocket服务:
         if self._服务端:
             self._服务端.close()
             await self._服务端.wait_closed()
-
-
 # ══════════════════════════════════════════════════════════════════════════
 # 主适配器
 # ══════════════════════════════════════════════════════════════════════════
@@ -539,6 +508,9 @@ class NapCat适配器(BasePlatformAdapter):
 
         # ── HTTP API (可选，推荐开启) ──
         self._HTTP接口地址: str = 附加配置.get("http_api_url", "") or os.getenv("NAPCAT_HTTP_API_URL", "")
+
+        # ── 表情回应 ──
+        self._启用表情回应: bool = 附加配置.get("emoji_react", False)
 
         # ── 机器人信息 ──
         self._机器人QQ号: str = 附加配置.get("bot_self_id", "") or os.getenv("NAPCAT_BOT_SELF_ID", "")
@@ -589,7 +561,7 @@ class NapCat适配器(BasePlatformAdapter):
         if isinstance(模式列表, str):
             模式列表 = [模式列表]
         if not isinstance(模式列表, list):
-            日志.warning("[纳猫] mention_patterns 必须是列表或字符串; 收到 %s", type(模式列表).__name__)
+            日志.warning("mention_patterns 必须是列表或字符串; 收到 %s", type(模式列表).__name__)
             return []
         结果 = []
         for 模式 in 模式列表:
@@ -598,7 +570,7 @@ class NapCat适配器(BasePlatformAdapter):
             try:
                 结果.append(re.compile(模式, re.IGNORECASE))
             except re.error as e:
-                日志.warning("[纳猫] 无效的关键词模式 %r: %s", 模式, e)
+                日志.warning("无效的关键词模式 %r: %s", 模式, e)
         return 结果
 
     def _检查关键词匹配(self, 文本: str) -> bool:
@@ -622,9 +594,9 @@ class NapCat适配器(BasePlatformAdapter):
         self._反向服务 = _反向WebSocket服务(self._接口调用器, self._处理WS事件)
         await self._反向服务.启动(self._反向主机, self._反向端口, self._访问令牌)
         self._mark_connected()
-        日志.info("[纳猫] 反向WS模式启动，等待 NapCat 连接端口 %s", self._反向端口)
+        日志.info("反向WS模式启动，等待 NapCat 连接端口 %s", self._反向端口)
         if self._HTTP接口地址:
-            日志.info("[纳猫] HTTP接口已启用: %s", self._HTTP接口地址)
+            日志.info("HTTP接口已启用: %s", self._HTTP接口地址)
         return True
 
     async def disconnect(self):
@@ -682,7 +654,6 @@ class NapCat适配器(BasePlatformAdapter):
 
         链路: 收到 → 去重 → 过滤 → @检测 → 解析文本 → 解析媒体 → 解析回复 → 分发
         """
-        追踪ID = 生成追踪ID()
         消息类型 = 原始数据.get("message_type", "")
         用户ID = str(原始数据.get("user_id", ""))
         消息ID = str(原始数据.get("message_id", ""))
@@ -693,24 +664,24 @@ class NapCat适配器(BasePlatformAdapter):
         if not isinstance(消息段列表, list):
             消息段列表 = []
 
-        日志.info("[纳猫][%s] ▶ 收到%s: 用户=%s(%s) 群=%s 消息ID=%s",
-                  追踪ID, "群聊" if 消息类型 == "group" else "私聊",
+        日志.info("▶ 收到%s: 用户=%s(%s) 群=%s 消息ID=%s",
+                  "群聊" if 消息类型 == "group" else "私聊",
                   昵称, 用户ID, 群ID or "-", 消息ID)
 
         # ── 步骤1: 去重 ──
         去重键 = f"napcat:{消息ID}" if 消息ID else f"napcat:{用户ID}:{str(原始数据.get('raw_message', ''))[:100]}"
         if self._去重器.is_duplicate(去重键):
-            日志.info("[纳猫][%s] ✗ 重复消息，跳过", 追踪ID)
+            日志.info("✗ 重复消息，跳过")
             return
 
         # ── 步骤2: 过滤自己 ──
         if 用户ID == self._机器人QQ号:
-            日志.info("[纳猫][%s] ✗ 自己的消息，跳过", 追踪ID)
+            日志.info("✗ 自己的消息，跳过")
             return
 
         # ── 步骤3: 用户权限 ──
         if not self._检查用户权限(用户ID):
-            日志.info("[纳猫][%s] ✗ 用户 %s 不在白名单", 追踪ID, 用户ID)
+            日志.info("✗ 用户 %s 不在白名单", 用户ID)
             return
 
         # ── 步骤4: 群聊触发检测 ──
@@ -724,15 +695,15 @@ class NapCat适配器(BasePlatformAdapter):
                 # 指令消息: 如果带了 @，必须是 @自己才处理
                 指令中有艾特 = any(段.get("type") == "at" for 段 in 消息段列表)
                 if 指令中有艾特 and not 是否被艾特:
-                    日志.info("[纳猫][%s] ✗ 指令@了别人，跳过", 追踪ID)
+                    日志.info("✗ 指令@了别人，跳过")
                     return
-                日志.info("[纳猫][%s] ✓ 指令消息通过", 追踪ID)
+                日志.info("✓ 指令消息通过")
             elif not 是否被艾特 and not 是否匹配关键词:
-                日志.info("[纳猫][%s] ✗ 群聊未@且无关键词匹配", 追踪ID)
+                日志.info("✗ 群聊未@且无关键词匹配")
                 return
             else:
-                日志.info("[纳猫][%s] ✓ 群聊触发: 被@=%s 关键词=%s",
-                          追踪ID, bool(是否被艾特), 是否匹配关键词)
+                日志.info("✓ 群聊触发: 被@=%s 关键词=%s",
+                          bool(是否被艾特), 是否匹配关键词)
 
         # ── 步骤5: 缓存昵称 ──
         if 昵称:
@@ -761,14 +732,14 @@ class NapCat适配器(BasePlatformAdapter):
         )
 
         # ── 步骤7: 解析主消息的媒体附件 (下载+记录URL) ──
-        媒体映射 = await self._解析媒体附件(消息段列表, 追踪ID)
+        媒体映射 = await self._解析媒体附件(消息段列表)
 
         # ── 步骤8: 构建完整文本 (带详细标签) ──
         文本 = 构建完整文本(消息段列表, 媒体映射)
-        日志.info("[纳猫][%s] 文本: %s", 追踪ID, 文本[:120] if 文本 else "(空)")
+        日志.info("文本: %s", 文本[:120] if 文本 else "(空)")
 
         # ── 步骤9: 解析回复的消息 ──
-        回复ID, 回复文本, 回复媒体映射 = await self._解析回复消息(消息段列表, 追踪ID)
+        回复ID, 回复文本, 回复媒体映射 = await self._解析回复消息(消息段列表)
         if 回复ID:
             回复标签 = f"[Reply:messageid={回复ID}]"
             if 回复文本:
@@ -799,7 +770,7 @@ class NapCat适配器(BasePlatformAdapter):
                 文本 = "[文件]"
 
         if not 文本.strip():
-            日志.info("[纳猫][%s] ✗ 无有效内容", 追踪ID)
+            日志.info("✗ 无有效内容")
             return
 
         # ── 步骤12: 推断消息分类 ──
@@ -834,28 +805,28 @@ class NapCat适配器(BasePlatformAdapter):
             reply_to_text=回复文本,
         )
 
-        日志.info("[纳猫][%s] ✓ 消息就绪: 分类=%s 文本=%d字 媒体=%d个 → 分发到网关",
-                  追踪ID, 消息分类.value, len(文本), len(媒体路径))
+        日志.info("✓ 消息就绪: 分类=%s 文本=%d字 媒体=%d个 → 分发到网关",
+                  消息分类.value, len(文本), len(媒体路径))
 
         # ── 步骤15: 可选表情回应 ──
-        if 启用表情回应 and 消息ID:
+        if self._启用表情回应 and 消息ID:
             try:
                 if 消息类型 == "group":
                     表情ID = random.choice(表情回应ID列表)
-                    任务 = asyncio.create_task(self._后台表情回应(消息ID, 表情ID, 追踪ID))
+                    任务 = asyncio.create_task(self._后台表情回应(消息ID, 表情ID))
                 else:
-                    任务 = asyncio.create_task(self._后台戳一戳(用户ID, 追踪ID))
+                    任务 = asyncio.create_task(self._后台戳一戳(用户ID))
                 self._后台任务.add(任务)
                 任务.add_done_callback(self._后台任务.discard)
             except Exception as e:
-                日志.debug("[纳猫][%s] 表情回应失败: %s", 追踪ID, e)
+                日志.debug("表情回应失败: %s", e)
 
         # ── 步骤16: 分发到网关 ──
         await self.handle_message(事件)
 
     # ── 媒体解析 ──────────────────────────────────────────────────────
 
-    async def _解析媒体附件(self, 消息段列表: List[dict], 追踪ID: str) -> dict:
+    async def _解析媒体附件(self, 消息段列表: List[dict]) -> dict:
         """
         提取消息段中的所有媒体附件。
         返回: {段索引: {"本地路径": ..., "原始URL": ..., "文件名": ..., "MIME": ...}}
@@ -883,26 +854,26 @@ class NapCat适配器(BasePlatformAdapter):
                     except (ValueError, TypeError):
                         文件大小 = 0
                     if 文件大小 and 文件大小 > 大小限制:
-                        日志.info("[纳猫][%s] %s 文件太大 (%d > %d bytes)，跳过下载",
-                                  追踪ID, 段类型, 文件大小, 大小限制)
+                        日志.info("%s 文件太大 (%d > %d bytes)，跳过下载",
+                                  段类型, 文件大小, 大小限制)
                     else:
                         # 大小在限制内，下载
                         if 段类型 == "image":
-                            本地路径 = await self._下载媒体(地址, "image", 大小限制, 追踪ID)
+                            本地路径 = await self._下载媒体(地址, "image", 大小限制)
                             默认MIME = "image/jpeg"
                         elif 段类型 == "record":
-                            本地路径 = await self._下载媒体(地址, "audio", 大小限制, 追踪ID)
+                            本地路径 = await self._下载媒体(地址, "audio", 大小限制)
                             默认MIME = "audio/ogg"
                         elif 段类型 == "video":
-                            本地路径 = await self._下载媒体(地址, "video", 大小限制, 追踪ID)
+                            本地路径 = await self._下载媒体(地址, "video", 大小限制)
                             默认MIME = "video/mp4"
                         elif 段类型 == "file":
-                            日志.info("[纳猫][%s] 文件段: path=%s url=%s file_id=%s",
-                                      追踪ID, 数据.get("path", ""), 数据.get("url", ""), 数据.get("file_id", ""))
-                            本地路径 = await self._解析文件段路径(数据, 追踪ID)
+                            日志.info("文件段: path=%s url=%s file_id=%s",
+                                      数据.get("path", ""), 数据.get("url", ""), 数据.get("file_id", ""))
+                            本地路径 = await self._解析文件段路径(数据)
                             默认MIME = "application/octet-stream"
                 else:
-                    日志.info("[纳猫][%s] %s 无 file_size，跳过下载", 追踪ID, 段类型)
+                    日志.info("%s 无 file_size，跳过下载", 段类型)
 
                 MIME类型 = mimetypes.guess_type(本地路径 or 地址)[0] or 默认MIME
                 媒体映射[i] = {
@@ -912,13 +883,13 @@ class NapCat适配器(BasePlatformAdapter):
                     "MIME": MIME类型,
                 }
                 if 本地路径:
-                    日志.info("[纳猫][%s] 媒体已下载: %s (%s)", 追踪ID, os.path.basename(本地路径), MIME类型)
+                    日志.info("媒体已下载: %s (%s)", os.path.basename(本地路径), MIME类型)
                 else:
-                    日志.info("[纳猫][%s] 媒体未下载: %s", 追踪ID, 地址[:80])
+                    日志.info("媒体未下载: %s", 地址[:80])
 
         return 媒体映射
 
-    async def _解析文件段路径(self, 数据: dict, 追踪ID: str) -> Optional[str]:
+    async def _解析文件段路径(self, 数据: dict) -> Optional[str]:
         """异步版本: 从 file 消息段中解析出本地文件路径。"""
         路径 = 数据.get("path", "")
         if 路径 and os.path.isfile(路径):
@@ -942,14 +913,14 @@ class NapCat适配器(BasePlatformAdapter):
                 if 文件信息.get("status") == "ok":
                     文件路径 = 文件信息.get("data", {}).get("file", "")
                     if 文件路径 and os.path.isfile(文件路径):
-                        日志.info("[纳猫][%s] get_file 解析成功: %s", 追踪ID, 文件路径)
+                        日志.info("get_file 解析成功: %s", 文件路径)
                         return 文件路径
             except Exception as e:
-                日志.debug("[纳猫][%s] get_file 失败 candidate=%s: %s", 追踪ID, 候选, e)
+                日志.debug("get_file 失败 candidate=%s: %s", 候选, e)
 
         return None
 
-    async def _解析回复消息(self, 消息段列表: List[dict], 追踪ID: str) -> tuple:
+    async def _解析回复消息(self, 消息段列表: List[dict]) -> tuple:
         """解析回复段，获取被回复消息的文本和媒体映射。"""
         回复段 = next((s for s in 消息段列表 if s.get("type") == "reply"), None)
         被回复ID = str(回复段.get("data", {}).get("id", "")) if 回复段 else ""
@@ -965,32 +936,32 @@ class NapCat适配器(BasePlatformAdapter):
             if 被回复消息.get("status") == "ok":
                 原始段列表 = 被回复消息.get("data", {}).get("message", [])
                 if isinstance(原始段列表, list):
-                    回复媒体映射 = await self._解析媒体附件(原始段列表, 追踪ID)
+                    回复媒体映射 = await self._解析媒体附件(原始段列表)
                     回复文本 = 构建完整文本(原始段列表, 回复媒体映射)
-                    日志.info("[纳猫][%s] 回复消息: ID=%s 文本=%s",
-                              追踪ID, 被回复ID, 回复文本[:40] if 回复文本 else "(空)")
+                    日志.info("回复消息: ID=%s 文本=%s",
+                              被回复ID, 回复文本[:40] if 回复文本 else "(空)")
         except Exception as e:
-            日志.debug("[纳猫][%s] 获取回复消息失败 %s: %s", 追踪ID, 被回复ID, e)
+            日志.debug("获取回复消息失败 %s: %s", 被回复ID, e)
 
         return 被回复ID, 回复文本, 回复媒体映射
 
     # ── 后台任务 ──────────────────────────────────────────────────────
 
-    async def _后台表情回应(self, 消息ID: str, 表情ID: int, 追踪ID: str):
+    async def _后台表情回应(self, 消息ID: str, 表情ID: int):
         try:
             结果 = await self._接口调用器.设置表情回应(消息ID, 表情ID)
             if 结果.get("status") != "ok":
-                日志.warning("[纳猫][%s] 表情回应失败: %s", 追踪ID, 结果)
+                日志.warning("表情回应失败: %s", 结果)
         except Exception as e:
-            日志.warning("[纳猫][%s] 表情回应异常: %s", 追踪ID, e)
+            日志.warning("表情回应异常: %s", e)
 
-    async def _后台戳一戳(self, 用户ID: str, 追踪ID: str):
+    async def _后台戳一戳(self, 用户ID: str):
         try:
             结果 = await self._接口调用器.戳一戳好友(用户ID)
             if 结果.get("status") != "ok":
-                日志.warning("[纳猫][%s] 戳一戳失败: %s", 追踪ID, 结果)
+                日志.warning("戳一戳失败: %s", 结果)
         except Exception as e:
-            日志.warning("[纳猫][%s] 戳一戳异常: %s", 追踪ID, e)
+            日志.warning("戳一戳异常: %s", e)
 
     async def _获取群名称(self, 群ID: str):
         if not self._接口调用器 or 群ID in self._群名缓存:
@@ -1000,13 +971,13 @@ class NapCat适配器(BasePlatformAdapter):
             名称 = 结果.get("data", {}).get("group_name", "")
             if 名称:
                 self._群名缓存.设置(群ID, 名称)
-                日志.debug("[纳猫] 群名: %s → %s", 群ID, 名称)
+                日志.debug("群名: %s → %s", 群ID, 名称)
         except Exception as e:
-            日志.debug("[纳猫] 获取群名失败 %s: %s", 群ID, e)
+            日志.debug("获取群名失败 %s: %s", 群ID, e)
 
     # ── 媒体下载 ──────────────────────────────────────────────────────
 
-    async def _下载媒体(self, 地址: str, 媒体类型: str = "image", 大小限制: int = 0, 追踪ID: str = "") -> Optional[str]:
+    async def _下载媒体(self, 地址: str, 媒体类型: str = "image", 大小限制: int = 0) -> Optional[str]:
         """
         下载媒体文件到本地临时目录。
         超过大小限制时不下载，返回 None (调用方会保留 URL)。
@@ -1037,8 +1008,8 @@ class NapCat适配器(BasePlatformAdapter):
                     with urllib.request.urlopen(头请求, timeout=10) as 头响应:
                         内容长度 = 头响应.getheader("Content-Length")
                         if 内容长度 and int(内容长度) > 限制字节:
-                            日志.info("[纳猫][%s] 文件太大 (%s > %d bytes)，跳过下载",
-                                      追踪ID, 内容长度, 限制字节)
+                            日志.info("文件太大 (%s > %d bytes)，跳过下载",
+                                      内容长度, 限制字节)
                             return None
                 except Exception:
                     pass  # HEAD 失败就继续尝试下载
@@ -1054,8 +1025,8 @@ class NapCat适配器(BasePlatformAdapter):
                             break
                         已下载.extend(块)
                         if len(已下载) > 限制字节:
-                            日志.info("[纳猫][%s] 下载中超过限制 (%d > %d bytes)，中断",
-                                      追踪ID, len(已下载), 限制字节)
+                            日志.info("下载中超过限制 (%d > %d bytes)，中断",
+                                      len(已下载), 限制字节)
                             return None
                     数据 = bytes(已下载)
 
@@ -1075,13 +1046,13 @@ class NapCat适配器(BasePlatformAdapter):
                             pass
                         raise
             except Exception as e:
-                日志.warning("[纳猫][%s] 下载失败: %s", 追踪ID, e)
+                日志.warning("下载失败: %s", e)
                 return None
 
         try:
             return await asyncio.to_thread(_同步下载)
         except Exception as e:
-            日志.warning("[纳猫][%s] 下载异常 %s: %s", 追踪ID, 地址, e)
+            日志.warning("下载异常 %s: %s", 地址, e)
             return None
 
     # ══════════════════════════════════════════════════════════════════
@@ -1199,10 +1170,10 @@ class NapCat适配器(BasePlatformAdapter):
 
             if 结果.get("status") == "ok" or 结果.get("retcode", -1) == 0:
                 return SendResult(success=True)
-            日志.debug("[纳猫] 合并转发失败 (retcode=%s), 回退到拆分", 结果.get("retcode"))
+            日志.debug("合并转发失败 (retcode=%s), 回退到拆分", 结果.get("retcode"))
             return None
         except Exception as e:
-            日志.debug("[纳猫] 合并转发异常: %s, 回退到拆分", e)
+            日志.debug("合并转发异常: %s, 回退到拆分", e)
             return None
 
     # ══════════════════════════════════════════════════════════════════
@@ -1219,27 +1190,29 @@ class NapCat适配器(BasePlatformAdapter):
             return SendResult(success=False, error="客户端未初始化")
 
         回复目标 = kwargs.get("reply_to")
-        追踪ID = 生成追踪ID()
+        回复CQ = f"[CQ:reply,id={回复目标}]" if 回复目标 else ""
         文本预览 = content[:20] if content else "非文本"
-        日志.info("[纳猫][%s] ▶ 发送: 会话=%s 长度=%d 预览=%s", 追踪ID, chat_id, len(content), 文本预览)
+        日志.info("▶ 发送: 会话=%s 长度=%d 预览=%s", chat_id, len(content), 文本预览)
 
-        # ── CQ 码检测 ──
+        # ── CQ 码检测 (```CQ ... ```) ──
         内容 = content.strip()
         if 内容.startswith("```CQ") and 内容.endswith("```"):
             CQ文本 = 内容[len("```CQ"):].rsplit("```", 1)[0].strip()
             if not CQ文本:
                 return SendResult(success=False, error="CQ码块内容为空")
-            日志.info("[纳猫][%s] CQ码: %s", 追踪ID, CQ文本[:80])
+            if 回复CQ:
+                CQ文本 = 回复CQ + CQ文本
+            日志.info("CQ码: %s", CQ文本[:80])
             消息类型, 目标ID = self._获取投递目标(chat_id)
             if 消息类型 is None:
                 return SendResult(success=False, error=目标ID)
             try:
                 if 消息类型 == "group":
-                    结果 = await self._接口调用器.发送群聊CQ码(目标ID, CQ文本)
+                    结果 = await self._接口调用器.发送群聊消息(目标ID, CQ文本)
                 else:
-                    结果 = await self._接口调用器.发送私聊CQ码(目标ID, CQ文本)
+                    结果 = await self._接口调用器.发送私聊消息(目标ID, CQ文本)
             except Exception as e:
-                日志.error("[纳猫][%s] CQ码发送失败: %s", 追踪ID, e)
+                日志.error("CQ码发送失败: %s", e)
                 return SendResult(success=False, error=str(e))
             if 结果.get("retcode", 0) == 0:
                 return SendResult(success=True)
@@ -1256,14 +1229,14 @@ class NapCat适配器(BasePlatformAdapter):
             if 消息类型 == "group":
                 转发结果 = await self._发送合并转发(chat_id, content, 回复目标)
                 if 转发结果:
-                    日志.info("[纳猫][%s] ✓ 合并转发成功 (阈值=%d)", 追踪ID, self._合并转发阈值)
+                    日志.info("✓ 合并转发成功 (阈值=%d)", self._合并转发阈值)
                     return 转发结果
-                日志.info("[纳猫][%s] 合并转发失败，回退到拆分发送", 追踪ID)
+                日志.info("合并转发失败，回退到拆分发送")
 
         # ── 超长消息拆分发送 (超过绝对上限时触发) ──
         if len(content) > 消息最大长度:
             段落列表 = self._拆分文本(content)
-            日志.info("[纳猫][%s] 拆分为 %d 段", 追踪ID, len(段落列表))
+            日志.info("拆分为 %d 段", len(段落列表))
             for i, 段落 in enumerate(段落列表):
                 消息段 = 构建消息数组(段落, 回复目标=回复目标)
                 if not 消息段:
@@ -1278,42 +1251,42 @@ class NapCat适配器(BasePlatformAdapter):
                         结果 = await self._接口调用器.发送私聊消息(目标, 消息段)
                     if 结果.get("status") == "failed" or 结果.get("retcode", 0) != 0:
                         错误 = 结果.get("wording") or 结果.get("msg") or "未知错误"
-                        日志.error("[纳猫][%s] 段%d/%d 发送失败: %s", 追踪ID, i + 1, len(段落列表), 错误)
+                        日志.error("段%d/%d 发送失败: %s", i + 1, len(段落列表), 错误)
                         return SendResult(success=False, error=f"段{i+1}发送失败: {错误}")
-                    日志.info("[纳猫][%s] 段%d/%d 发送完成", 追踪ID, i + 1, len(段落列表))
+                    日志.info("段%d/%d 发送完成", i + 1, len(段落列表))
                 except Exception as e:
-                    日志.error("[纳猫][%s] 段%d发送异常: %s", 追踪ID, i + 1, e)
+                    日志.error("段%d发送异常: %s", i + 1, e)
                     return SendResult(success=False, error=str(e))
                 回复目标 = None  # 只有第一段带回复
 
             return SendResult(success=True)
 
-        # ── 普通消息 ──
-        消息段 = 构建消息数组(content, 回复目标=回复目标)
-        if not 消息段:
+        # ── 普通消息 (统一用 CQ 码字符串发送) ──
+        CQ文本 = 回复CQ + 文本转CQ码(content)
+        if not CQ文本.strip():
             return SendResult(success=False, error="消息为空")
 
         try:
             消息类型, 目标ID = self._获取投递目标(chat_id)
             if 消息类型 is None:
                 return SendResult(success=False, error=目标ID)
-            日志.info("[纳猫][%s] → %s:%s", 追踪ID, 消息类型, 目标ID)
+            日志.info("→ %s:%s", 消息类型, 目标ID)
 
             if 消息类型 == "group":
-                结果 = await self._接口调用器.发送群聊消息(目标ID, 消息段)
+                结果 = await self._接口调用器.发送群聊消息(目标ID, CQ文本)
             else:
-                结果 = await self._接口调用器.发送私聊消息(目标ID, 消息段)
+                结果 = await self._接口调用器.发送私聊消息(目标ID, CQ文本)
 
             if 结果.get("status") == "failed" or 结果.get("retcode", 0) != 0:
                 错误 = 结果.get("wording") or 结果.get("message") or 结果.get("msg") or "未知错误"
-                日志.error("[纳猫][%s] ✗ 发送失败: %s", 追踪ID, 错误)
+                日志.error("✗ 发送失败: %s", 错误)
                 return SendResult(success=False, error=f"OneBot API 错误: {错误}")
 
-            日志.info("[纳猫][%s] ✓ 发送成功", 追踪ID)
+            日志.info("✓ 发送成功")
             return SendResult(success=True)
 
         except Exception as e:
-            日志.error("[纳猫][%s] ✗ 发送异常: %s", 追踪ID, e)
+            日志.error("✗ 发送异常: %s", e)
             return SendResult(success=False, error=str(e))
 
     async def send_image(self, chat_id: str, image_url: str, caption: str = "") -> SendResult:
@@ -1323,19 +1296,19 @@ class NapCat适配器(BasePlatformAdapter):
         if not self._接口调用器:
             return SendResult(success=False, error="客户端未初始化")
 
-        消息段 = []
+        CQ文本 = ""
         if caption and caption.strip():
-            消息段.append(构建文本段(caption))
-        消息段.append(构建图片段(image_url))
+            CQ文本 = caption
+        CQ文本 += f"[CQ:image,file={image_url}]"
 
         try:
             消息类型, 目标ID = self._获取投递目标(chat_id)
             if 消息类型 is None:
                 return SendResult(success=False, error=目标ID)
             if 消息类型 == "group":
-                结果 = await self._接口调用器.发送群聊消息(目标ID, 消息段)
+                结果 = await self._接口调用器.发送群聊消息(目标ID, CQ文本)
             else:
-                结果 = await self._接口调用器.发送私聊消息(目标ID, 消息段)
+                结果 = await self._接口调用器.发送私聊消息(目标ID, CQ文本)
             if 结果.get("status") == "failed" or 结果.get("retcode", 0) != 0:
                 错误 = 结果.get("wording") or 结果.get("message") or 结果.get("msg") or "未知错误"
                 return SendResult(success=False, error=f"图片发送失败: {错误}")
@@ -1355,21 +1328,24 @@ class NapCat适配器(BasePlatformAdapter):
             try:
                 await self.send(chat_id, caption)
             except Exception as e:
-                日志.warning("[纳猫] 图片caption发送失败: %s", e)
+                日志.warning("图片caption发送失败: %s", e)
 
-        消息段 = [构建图片段(image_path)]
+        回复目标 = kwargs.get("reply_to")
+        CQ文本 = ""
+        if 回复目标:
+            CQ文本 = f"[CQ:reply,id={回复目标}]"
+        CQ文本 += f"[CQ:image,file=file:///{image_path.lstrip('/')}]"
         消息类型, 目标ID = self._获取投递目标(chat_id)
         if 消息类型 is None:
             return SendResult(success=False, error=目标ID)
-        追踪ID = 生成追踪ID()
-        日志.info("[纳猫][%s] 发送图片: %s → %s:%s", 追踪ID, image_path, 消息类型, 目标ID)
+        日志.info("发送图片: %s → %s:%s", image_path, 消息类型, 目标ID)
 
         # 优先 HTTP API
         if self._HTTP接口地址:
             try:
                 参数 = {
                     "group_id" if 消息类型 == "group" else "user_id": int(目标ID),
-                    "message": 消息段,
+                    "message": CQ文本,
                 }
                 结果 = await self._HTTP调用(
                     "send_group_msg" if 消息类型 == "group" else "send_private_msg", 参数
@@ -1377,12 +1353,12 @@ class NapCat适配器(BasePlatformAdapter):
                 返回码 = 结果.get("retcode", -1)
                 if 返回码 in (0, 200):
                     if 返回码 == 200:
-                        日志.info("[纳猫][%s] 图片发送 retcode=200 (调用超时但可能已送达)", 追踪ID)
+                        日志.info("图片发送 retcode=200 (调用超时但可能已送达)")
                     return SendResult(success=True)
                 错误 = 结果.get("message", "") or 结果.get("wording", "") or 结果.get("msg", "")
                 return SendResult(success=False, error=错误 or f"retcode={返回码}")
             except Exception as e:
-                日志.warning("[纳猫][%s] HTTP图片发送失败，回退WS: %s", 追踪ID, e)
+                日志.warning("HTTP图片发送失败，回退WS: %s", e)
 
         # WS 回退
         if not self._接口调用器:
@@ -1390,13 +1366,13 @@ class NapCat适配器(BasePlatformAdapter):
 
         try:
             if 消息类型 == "group":
-                结果 = await self._接口调用器.发送群聊消息(目标ID, 消息段)
+                结果 = await self._接口调用器.发送群聊消息(目标ID, CQ文本)
             else:
-                结果 = await self._接口调用器.发送私聊消息(目标ID, 消息段)
+                结果 = await self._接口调用器.发送私聊消息(目标ID, CQ文本)
             if 结果.get("status") == "failed" or 结果.get("retcode", 0) != 0:
                 错误 = 结果.get("wording") or 结果.get("message") or 结果.get("msg") or "未知错误"
                 if "timeout" in 错误.lower():
-                    日志.info("[纳猫][%s] WS图片超时 — 可能已送达", 追踪ID)
+                    日志.info("WS图片超时 — 可能已送达")
                     return SendResult(success=True)
                 return SendResult(success=False, error=错误)
             return SendResult(success=True)
@@ -1424,15 +1400,18 @@ class NapCat适配器(BasePlatformAdapter):
         if not self._接口调用器:
             return SendResult(success=False, error="客户端未就绪")
 
-        消息段 = [构建语音段(audio_path)]
+        CQ文本 = ""
+        if reply_to:
+            CQ文本 = f"[CQ:reply,id={reply_to}]"
+        CQ文本 += f"[CQ:record,file=file:///{audio_path.lstrip('/')}]"
         try:
             消息类型, 目标ID = self._获取投递目标(chat_id)
             if 消息类型 is None:
                 return SendResult(success=False, error=目标ID)
             if 消息类型 == "group":
-                结果 = await self._接口调用器.发送群聊消息(目标ID, 消息段)
+                结果 = await self._接口调用器.发送群聊消息(目标ID, CQ文本)
             else:
-                结果 = await self._接口调用器.发送私聊消息(目标ID, 消息段)
+                结果 = await self._接口调用器.发送私聊消息(目标ID, CQ文本)
 
             if 结果.get("status") == "failed" or 结果.get("retcode", 0) != 0:
                 错误 = 结果.get("wording") or 结果.get("message") or 结果.get("msg") or "未知错误"
@@ -1457,13 +1436,12 @@ class NapCat适配器(BasePlatformAdapter):
 
             if caption and caption.strip():
                 try:
-                    文本段 = [构建文本段(caption)]
                     if 消息类型 == "group":
-                        await self._接口调用器.发送群聊消息(目标ID, 文本段)
+                        await self._接口调用器.发送群聊消息(目标ID, caption)
                     else:
-                        await self._接口调用器.发送私聊消息(目标ID, 文本段)
+                        await self._接口调用器.发送私聊消息(目标ID, caption)
                 except Exception as e:
-                    日志.warning("[纳猫] 文件caption发送失败: %s", e)
+                    日志.warning("文件caption发送失败: %s", e)
 
             if 消息类型 == "group":
                 结果 = await self._接口调用器.上传群文件(目标ID, 路径)

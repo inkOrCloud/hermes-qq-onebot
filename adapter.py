@@ -29,7 +29,7 @@ def _是否已连接(配置) -> bool:
 
 def register(ctx):
     """插件入口 — 由 Hermes 插件系统调用。"""
-    from napcat_adapter import NapCat适配器, 检查依赖
+    from .napcat_adapter import NapCat适配器, 检查依赖
 
     ctx.register_platform(
         name="napcat",
@@ -55,8 +55,6 @@ def register(ctx):
             "你正在通过 NapCat (QQ) 对话。"
             "支持文字、图片、语音、文件收发。回复保持简洁自然。"
             "\n\n【CQ码规则】发送图片/文件/语音/视频时必须用CQ码，"
-            "整条消息必须是完整的CQ码块，不能在CQ码前后加任何文字！"
-            "格式：```CQ\n文本[CQ:image,file=/path/to/file]\n```"
-            "混用文本和CQ码会导致发送失败。"
+            "格式：[CQ:image,file=/path/to/file]，直接写在消息文本中即可。"
         ),
     )

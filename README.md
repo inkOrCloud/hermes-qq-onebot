@@ -38,20 +38,15 @@ hermes plugins install landamao/hermes-qq-onebot --enable
 
 ## CQ 码支持
 
-Agent 可通过 CQ 码直接发送复杂消息（绕过网关的文件路径自动检测）：
+Agent 可通过 CQ 码直接发送复杂消息，直接写在消息文本中即可：
 
-```CQ
-[CQ:at,qq=123456] 看看这个 [CQ:image,file=/tmp/test.jpg]
+```
+看看这个 [CQ:image,file=/tmp/test.jpg]
 ```
 
-```CQ
+```
 这是你要的文件 [CQ:file,file=/tmp/document.pdf,name=文档.pdf]
 ```
-
-**格式要求：**
-- 必须用 ` ```CQ ` 和 ` ``` ` 包裹
-- 整条消息必须是一个完整的 CQ 码块
-- 所有内容（包括文字）都放在 CQ 码块内，不要拆分
 
 **支持的 CQ 码类型：**
 - `[CQ:at,qq=123]` — @某人
@@ -74,25 +69,6 @@ extra:
     video: 100MB
     file: 50MB
 ```
-
-## 消息链路追踪
-
-每条消息分配 8 位追踪ID，贯穿全流程：
-
-```
-[纳猫][a1b2c3d4] ▶ 收到群聊: 用户=小明(123456) 群=789 消息ID=100
-[纳猫][a1b2c3d4] 去重检查通过
-[纳猫][a1b2c3d4] ✓ 群聊触发: 被@=True 关键词=False
-[纳猫][a1b2c3d4] 文本: @机器人 你好
-[纳猫][a1b2c3d4] 媒体: photo.jpg (image/jpeg)
-[纳猫][a1b2c3d4] ✓ 消息就绪: 分类=photo 文本=6字 媒体=1个 → 分发到网关
-
-[纳猫][e5f6g7h8] ▶ 发送: 会话=napcat_group_789 长度=42
-[纳猫][e5f6g7h8] → group:789
-[纳猫][e5f6g7h8] ✓ 发送成功
-```
-
-日志中搜索 `[纳猫][追踪ID]` 即可追踪完整生命周期。
 
 ## 功能
 
@@ -149,6 +125,9 @@ platforms:
       # ── 用户白名单 ──
       # 为空或不设置则允许所有用户
       allowed_qq_ids: "123456,789012"   # 逗号分隔的 QQ 号列表
+
+      # ── 表情回应 ──
+      emoji_react: false                # 收到消息后随机回应表情（默认 false）
 ```
 
 ## 环境变量 (可选)
