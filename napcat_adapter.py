@@ -288,6 +288,9 @@ def 构建完整文本(消息段列表: List[dict], 媒体映射: dict) -> str:
         elif 段类型 == "reply":
             continue  # reply 段单独处理
 
+        else:
+            部分.append(f"[不支持的消息类型:{段类型}]")
+
     return "".join(部分).strip()
 
 # ── 智能截断（保留完整媒体标签）──────────────────────────────────────
