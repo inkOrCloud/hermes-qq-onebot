@@ -771,12 +771,6 @@ class NapCat适配器(BasePlatformAdapter):
 
         # ── 步骤9: 解析回复的消息 ──
         回复ID, 回复文本, 回复媒体映射 = await self._解析回复消息(消息段列表)
-        if 回复ID:
-            回复标签 = f"[Reply:messageid={回复ID}]"
-            if 回复文本:
-                文本 = f"{回复标签} {回复文本}\n{文本}"
-            else:
-                文本 = f"{回复标签}\n{文本}"
 
         # ── 步骤10: 收集已下载的媒体路径 ──
         媒体路径: List[str] = []
@@ -833,7 +827,7 @@ class NapCat适配器(BasePlatformAdapter):
             media_urls=媒体路径,
             media_types=媒体类型,
             reply_to_message_id=回复ID,
-            reply_to_text=回复文本,
+            reply_to_text=f"[Reply:msg_id={回复ID}] {回复文本}" if 回复ID and 回复文本 else (f"[Reply:msg_id={回复ID}]" if 回复ID else None),
         )
 
         日志.info("✓ 消息就绪: 分类=%s 文本=%d字 媒体=%d个 → 分发到网关",
