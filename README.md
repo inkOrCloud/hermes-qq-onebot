@@ -116,6 +116,9 @@ platforms:
       merge_forward_threshold: 800      # 群聊超过此字数触发合并转发（默认 800，私聊不触发）
       forward_name: "纳西妲"      # 合并转发显示的名字（默认 纳西妲）
 
+      # ── 引用回复 ──
+      reply_text_max_length: 50         # 解析引用回复消息的最大字数，超出截断用省略号（默认 50）
+
       # ── 关键词触发 ──
       # 群聊中匹配这些正则时自动响应（不区分大小写）
       mention_patterns:

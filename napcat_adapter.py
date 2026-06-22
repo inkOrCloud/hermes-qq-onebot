@@ -55,6 +55,7 @@ def 检查依赖() -> bool:
 消息最大长度 = 4500
 默认合并转发阈值 = 800
 表情回应ID列表 = [66,76,124,144,147,192,201,282,297]
+默认引用文本最大字数 = 50
 
 # ── 自动下载限制 ─────────────────────────────────────────────────────
 # 超过限制的媒体不下载，只保留 URL，Agent 需要时再下载
@@ -538,6 +539,9 @@ class NapCat适配器(BasePlatformAdapter):
         self._合并转发阈值: int = int(附加配置.get("merge_forward_threshold", 默认合并转发阈值))
         self._合并转发昵称: str = 附加配置.get("forward_name", "纳西妲")
 
+        # ── 引用回复文本最大字数 ──
+        self._引用文本最大字数: int = int(附加配置.get("reply_text_max_length", 默认引用文本最大字数))
+
         # ── 关键词触发 ──
         self._关键词模式: List[re.Pattern] = self._编译关键词模式(附加配置)
 
@@ -938,6 +942,9 @@ class NapCat适配器(BasePlatformAdapter):
                 if isinstance(原始段列表, list):
                     回复媒体映射 = await self._解析媒体附件(原始段列表)
                     回复文本 = 构建完整文本(原始段列表, 回复媒体映射)
+                    # 截断引用文本
+                    if 回复文本 and len(回复文本) > self._引用文本最大字数:
+                        回复文本 = 回复文本[:self._引用文本最大字数] + "..."
                     日志.info("回复消息: ID=%s 文本=%s",
                               被回复ID, 回复文本[:40] if 回复文本 else "(空)")
         except Exception as e:
