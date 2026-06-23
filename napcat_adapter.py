@@ -201,6 +201,25 @@ def 文本转CQ码(文本: str, 附件列表: Optional[List[dict]] = None) -> st
         else:
             部分.append(f"[CQ:file,file=file:///{路径.lstrip('/')}]")
     return "".join(部分)
+
+# ── CQ 码拆分 (合并转发用) ──────────────────────────────────────────────────
+CQ码正则 = re.compile(r'\[CQ:[^\]]+\]')
+
+def 拆分CQ码(内容: str) -> List[tuple]:
+    """将内容拆分为 (类型, 片段) 列表。类型为 'text' 或 'cq'。"""
+    片段 = []
+    位置 = 0
+    for 匹配 in CQ码正则.finditer(内容):
+        前文本 = 内容[位置:匹配.start()]
+        if 前文本.strip():
+            片段.append(("text", 前文本))
+        片段.append(("cq", 匹配.group()))
+        位置 = 匹配.end()
+    尾文本 = 内容[位置:]
+    if 尾文本.strip():
+        片段.append(("text", 尾文本))
+    return 片段
+
 # ══════════════════════════════════════════════════════════════════════════
 # 消息解析 (接收方向)
 # ══════════════════════════════════════════════════════════════════════════
@@ -1170,7 +1189,11 @@ class NapCat适配器(BasePlatformAdapter):
         return [段 for 段 in 段落 if 段]
 
     async def _发送合并转发(self, 会话ID: str, 内容: str, 回复目标: Optional[str] = None) -> Optional[SendResult]:
-        """尝试以合并转发方式发送长内容。失败时返回 None，调用方回退到拆分发送。"""
+        """尝试以合并转发方式发送长内容。失败时返回 None，调用方回退到拆分发送。
+
+        如果内容中包含 CQ 码，将 CQ 码提取出来作为独立的消息节点发送，
+        每个 CQ 码一条消息，文本部分按段落拆分为独立节点。
+        """
         投递 = self._投递信息.获取(会话ID, {})
         消息类型 = 投递.get("消息类型", "")
         目标ID = 投递.get("目标ID", "")
@@ -1184,14 +1207,32 @@ class NapCat适配器(BasePlatformAdapter):
             节点列表.append({"type": "node", "data": {"id": int(回复目标)}})
 
         机器人ID = self._机器人QQ号 or "0"
-        节点列表.append({
-            "type": "node",
-            "data": {
-                "uin": int(机器人ID),
-                "name": self._合并转发昵称,
-                "content": [构建文本段(内容)],
-            },
-        })
+
+        # ── 检测内容中是否有 CQ 码 ──
+        片段列表 = 拆分CQ码(内容)
+        有CQ码 = any(类型 == "cq" for 类型, _ in 片段列表)
+
+        if 有CQ码:
+            # 有 CQ 码：每个文本片段和每个 CQ 码各作为独立节点
+            for 类型, 片段 in 片段列表:
+                节点列表.append({
+                    "type": "node",
+                    "data": {
+                        "uin": int(机器人ID),
+                        "name": self._合并转发昵称,
+                        "content": 片段,  # CQ 码字符串直接作为 content
+                    },
+                })
+        else:
+            # 无 CQ 码：整段文本作为一个节点
+            节点列表.append({
+                "type": "node",
+                "data": {
+                    "uin": int(机器人ID),
+                    "name": self._合并转发昵称,
+                    "content": [构建文本段(内容)],
+                },
+            })
 
         try:
             if 消息类型 == "group":
