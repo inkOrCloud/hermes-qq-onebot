@@ -80,26 +80,110 @@ Agent 直接在文本里写 `[CQ:image,file=...]` 发送复杂消息，无需额
 
 ---
 
-## 🚀 安装
+## 🚀 安装 & 使用
+
+### 1️⃣ 安装插件
 
 ```bash
 hermes plugins install landamao/hermes-qq-onebot --enable
 ```
 
-搞定！现在配置 NapCat 连接过来就行。
-
 <details>
 <summary>🔧 手动安装</summary>
 
 ```bash
-# 克隆到 Hermes 插件目录
 git clone https://github.com/landamao/hermes-qq-onebot.git ~/.hermes/plugins/napcat
-
-# 安装依赖
 pip install websockets
-
-# 重启网关
 hermes gateway restart
+```
+</details>
+
+### 2️⃣ 配置 Hermes
+
+在 `~/.hermes/config.yaml` 中添加：
+
+```yaml
+platforms:
+  napcat:
+    enabled: true
+    extra:
+      reverse_host: "0.0.0.0"              # 监听地址
+      reverse_port: 6700                    # 监听端口
+      access_token: ""                      # 访问令牌（可选）
+      http_api_url: "http://127.0.0.1:5700" # HTTP API（推荐开启）
+```
+
+<details>
+<summary>⚙️ 更多可选配置</summary>
+
+```yaml
+      # ── 媒体下载限制 ──
+      download_limits:
+        image: 10MB                         # 支持 B/KB/MB/GB
+        record: 10MB
+        video: 10MB
+        file: 10MB
+
+      # ── 长消息 ──
+      merge_forward_threshold: 800          # 群聊超过此字数触发合并转发
+      forward_name: "纳西妲"                 # 合并转发显示名
+
+      # ── 引用回复 ──
+      reply_text_max_length: 50             # 引用原文最大字数
+
+      # ── 关键词触发 ──
+      mention_patterns:                     # 正则，不区分大小写
+        - "纳猫"
+        - "帮我"
+
+      # ── 用户白名单 ──
+      allowed_qq_ids: "123456,789012"       # 逗号分隔，留空=允许所有
+
+      # ── 其他 ──
+      show_qq_id: false                     # 用户名后显示 QQ 号
+      emoji_react: false                    # 随机回应表情
+      bot_self_id: ""                        # 机器人 QQ 号（自动学习）
+```
+
+</details>
+
+### 3️⃣ 配置 NapCat
+
+在 NapCat 配置文件中设置反向 WS：
+
+```json
+{
+  "ws_reverse": {
+    "enable": true,
+    "url": "ws://127.0.0.1:6700",
+    "reconnect_interval": 3000,
+    "token": ""
+  }
+}
+```
+
+> 如果 Hermes 端配了 `access_token`，NapCat 端也需要设置相同的 token。
+
+### 4️⃣ 启动
+
+```bash
+hermes gateway restart
+```
+
+连接成功后日志会显示 `反向WS模式启动，等待 NapCat 连接端口 6700`，NapCat 连入后即可在 QQ 中与 Agent 对话。
+
+<details>
+<summary>🌍 环境变量覆盖</summary>
+
+所有配置项都可通过环境变量覆盖（优先级低于 config.yaml）：
+
+```bash
+NAPCAT_ACCESS_TOKEN=***                  # 访问令牌
+NAPCAT_HTTP_API_URL=http://127.0.0.1:5700  # HTTP API 地址
+NAPCAT_BOT_SELF_ID=123456789             # 机器人 QQ 号
+NAPCAT_ALLOWED_USERS=123456,789012       # 用户白名单
+NAPCAT_ALLOW_ALL_USERS=false             # 允许所有用户
+NAPCAT_MENTION_PATTERNS=纳猫,帮我        # 关键词触发
 ```
 </details>
 
@@ -154,87 +238,6 @@ Agent 直接在回复文本里写 CQ 码，适配器自动解析发送：
 ```
 
 **支持的 CQ 码：** `[CQ:at]` · `[CQ:image]` · `[CQ:record]` · `[CQ:video]` · `[CQ:file]` · `[CQ:face]` · 以及更多 OneBot v11 标准 CQ 码
-
----
-
-## ⚙️ 配置
-
-在 `~/.hermes/config.yaml` 中添加：
-
-```yaml
-platforms:
-  napcat:
-    enabled: true
-    extra:
-      # ── 连接 ──
-      reverse_host: "0.0.0.0"              # 监听地址
-      reverse_port: 6700                    # 监听端口
-      access_token: ""                      # 访问令牌（可选）
-
-      # ── HTTP API（推荐开启）──
-      http_api_url: "http://127.0.0.1:5700"
-
-      # ── 媒体下载限制 ──
-      download_limits:
-        image: 10MB                         # 支持 B/KB/MB/GB
-        record: 10MB
-        video: 10MB
-        file: 10MB
-
-      # ── 长消息 ──
-      merge_forward_threshold: 800          # 群聊超过此字数触发合并转发
-      forward_name: "纳西妲"                 # 合并转发显示名
-
-      # ── 引用回复 ──
-      reply_text_max_length: 50             # 引用原文最大字数
-
-      # ── 关键词触发 ──
-      mention_patterns:                     # 正则，不区分大小写
-        - "纳猫"
-        - "帮我"
-
-      # ── 用户白名单 ──
-      allowed_qq_ids: "123456,789012"       # 逗号分隔，留空=允许所有
-
-      # ── 其他 ──
-      show_qq_id: false                     # 用户名后显示 QQ 号
-      emoji_react: false                    # 随机回应表情
-      bot_self_id: ""                        # 机器人 QQ 号（自动学习）
-```
-
-<details>
-<summary>🌍 环境变量覆盖</summary>
-
-所有配置项都可通过环境变量覆盖（优先级低于 config.yaml）：
-
-```bash
-NAPCAT_ACCESS_TOKEN=***                  # 访问令牌
-NAPCAT_HTTP_API_URL=http://127.0.0.1:5700  # HTTP API 地址
-NAPCAT_BOT_SELF_ID=123456789             # 机器人 QQ 号
-NAPCAT_ALLOWED_USERS=123456,789012       # 用户白名单
-NAPCAT_ALLOW_ALL_USERS=false             # 允许所有用户
-NAPCAT_MENTION_PATTERNS=纳猫,帮我        # 关键词触发
-```
-</details>
-
----
-
-## 🔗 NapCat 端配置
-
-在 NapCat 配置文件中设置反向 WS 连接：
-
-```json
-{
-  "ws_reverse": {
-    "enable": true,
-    "url": "ws://127.0.0.1:6700",
-    "reconnect_interval": 3000,
-    "token": ""
-  }
-}
-```
-
-> 如果配置了 `access_token`，NapCat 端也需要设置相同的 token。
 
 ---
 
