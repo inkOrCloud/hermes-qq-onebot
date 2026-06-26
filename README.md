@@ -1,167 +1,227 @@
-# NapCat QQ 适配器
+<div align="center">
 
-基于 OneBot v11 协议的 QQ 平台适配器，为 Hermes Agent 添加 QQ 支持。
+# Hermes-QQ-OneBot
 
-支持 NapCat / go-cqhttp / Lagrange.OneBot / LLOneBot 等兼容实现。
+**Hermes Agent × QQ — 让 AI 在 QQ 里活起来**
 
-## 架构
+[![Hermes Plugin](https://img.shields.io/badge/Hermes-Platform%20Plugin-7c3aed?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiPjxwYXRoIGQ9Ik0xMiAyTDIuNSA3djEwTDEyIDIybDkuNS0yVjciLz48L3N2Zz4=)](https://hermes-agent.nousresearch.com/docs)
+[![OneBot v11](https://img.shields.io/badge/OneBot-v11-1677ff?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIi8+PC9zdmc+)](https://github.com/botuniverse/onebot)
+[![Version](https://img.shields.io/badge/version-2.1.3-green)](./plugin.yaml)
+[![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+
+*基于 OneBot v11 协议的 QQ 平台适配器，为 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 接入 QQ 生态*
+
+</div>
+
+---
+
+## ✨ 亮点
+
+<table>
+<tr>
+<td width="50%">
+
+### 🔌 即装即用
+一行命令安装启用，反向 WebSocket 零配置连接，NapCat 主动连过来
+
+</td>
+<td width="50%">
+
+### 🧩 纯插件设计
+不动 Hermes 一行源码，安装即生效，卸载即干净，零侵入
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 📦 CQ 码原生支持
+Agent 直接在文本里写 `[CQ:image,file=...]` 发送复杂消息，无需额外 API
+
+</td>
+<td width="50%">
+
+### 🛡️ 按需下载媒体
+只在被唤醒时下载媒体，闲聊消息不碰磁盘，超限只保留 URL 由 Agent 按需取用
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### ✂️ 长消息合并转发
+群聊超长回复自动合并转发，CQ 码智能拆分为独立消息节点
+
+</td>
+<td width="50%">
+
+### 🔑 关键词触发
+正则匹配群聊消息自动响应，不用 @ 也能唤醒 Agent
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🏗️ 架构
 
 ```
-QQ 客户端 ←→ NapCat (OneBot 实现)
-                  ↓ 反向 WebSocket (NapCat 主动连过来)
-             NapCat 适配器 (hermes-qq-onebot)
-                  ↓ 可选 HTTP API (图片发送、文件获取)
-             OneBot API
+📱 QQ 客户端
+      ↕
+🌊 NapCat / Lagrange / go-cqhttp / LLOneBot  (OneBot v11 实现)
+      ↓ 反向 WebSocket (主动连接适配器)
+🔌 hermes-qq-onebot
+      ↓
+🤖 Hermes Agent (完整 AI 能力: 终端/浏览器/文件/搜索/...)
 ```
 
-- **反向 WebSocket**：适配器起 server，NapCat 主动连接
-- **HTTP API**：可选但推荐，解决图片发送超时、文件获取等问题
+> **反向 WebSocket** — 适配器起 Server，OneBot 实现主动连过来，无需公网 IP，无需开放端口。
 
-## 安装
+---
+
+## 🚀 安装
 
 ```bash
 hermes plugins install landamao/hermes-qq-onebot --enable
 ```
 
-## 消息标签格式
+搞定！现在配置 NapCat 连接过来就行。
 
-每种媒体都带详细信息，Agent 可直接获取路径或 URL：
+<details>
+<summary>🔧 手动安装</summary>
 
-| 类型 | 标签格式 |
-|------|----------|
-| 图片 | `[图片:file=/tmp/xxx.jpg]` 或 `[图片:url=https://...]` |
-| 语音 | `[语音:file=/tmp/xxx.ogg]` 或 `[语音:url=https://...]` |
-| 视频 | `[视频:url=https://...]` 或 `[视频:file=/tmp/xxx.mp4]` |
-| 文件 | `[文件:name=report.pdf,file=/tmp/xxx]` 或 `[文件:name=report.pdf,url=https://...]` |
-| 表情 | `[表情:id=123]` |
-| @提及 | `@昵称(QQ:123456)` |
+```bash
+# 克隆到 Hermes 插件目录
+git clone https://github.com/landamao/hermes-qq-onebot.git ~/.hermes/plugins/napcat
 
-## CQ 码支持
+# 安装依赖
+pip install websockets
 
-Agent 可通过 CQ 码直接发送复杂消息，直接写在消息文本中即可：
+# 重启网关
+hermes gateway restart
+```
+</details>
+
+---
+
+## 📋 兼容的 OneBot 实现
+
+| 实现 | 状态 | 说明 |
+|:-----|:----:|:-----|
+| [NapCat](https://github.com/NapNeko/NapCatQQ) | ✅ 首选 | 推荐使用，功能最全面 |
+| [Lagrange.OneBot](https://github.com/LagrangeDev/Lagrange.Core) | ✅ 兼容 | 正常工作 |
+| [go-cqhttp](https://github.com/Mrs4s/go-cqhttp) | ⚠️ 旧版 | 可用但已停止维护 |
+| [LLOneBot](https://github.com/LLOneBot/LLOneBot) | ✅ 兼容 | 正常工作 |
+
+> 只要符合 OneBot v11 标准的实现都能用～
+
+---
+
+## 🎯 功能一览
+
+### 💬 消息能力
+
+| 功能 | 说明 |
+|:-----|:-----|
+| 私聊 / 群聊 | 双模式消息收发 |
+| @ 提及检测 | 被 @ 自动响应 |
+| 关键词触发 | 正则匹配，不 @ 也能唤醒 |
+| 引用回复 | 解析被引用的原文并截断 |
+| 长消息合并转发 | 群聊超阈值自动合并，CQ 码拆分为独立节点 |
+| 表情回应 / 戳一戳 | 默认关闭，按需开启 |
+
+### 📎 媒体支持
+
+| 类型 | 接收 | 发送 | 消息标签 |
+|:-----|:----:|:----:|:---------|
+| 🖼️ 图片 | ✅ | ✅ | `[图片:file=/tmp/xxx.jpg]` 或 `[图片:url=https://...]` |
+| 🎤 语音 | ✅ | ✅ | `[语音:file=/tmp/xxx.ogg]` 或 `[语音:url=https://...]` |
+| 🎬 视频 | ✅ | ✅ | `[视频:url=https://...]` 或 `[视频:file=/tmp/xxx.mp4]` |
+| 📄 文件 | ✅ | ✅ | `[文件:name=report.pdf,file=/tmp/xxx]` |
+| 😊 表情 | ✅ | ✅ | `[表情:id=123]` |
+| 📢 @ 提及 | ✅ | ✅ | `@昵称(QQ:123456)` → `[CQ:at,qq=123]` |
+
+> Agent 看到的是带路径/URL 的结构化标签，不需要额外处理就能拿到文件。
+
+### 📤 CQ 码发送
+
+Agent 直接在回复文本里写 CQ 码，适配器自动解析发送：
 
 ```
 看看这个 [CQ:image,file=/tmp/test.jpg]
-```
-
-```
 这是你要的文件 [CQ:file,file=/tmp/document.pdf,name=文档.pdf]
 ```
 
-**支持的 CQ 码类型：**
-- `[CQ:at,qq=123]` — @某人
-- `[CQ:image,file=路径或URL]` — 发送图片
-- `[CQ:record,file=路径或URL]` — 发送语音
-- `[CQ:video,file=路径或URL]` — 发送视频
-- `[CQ:file,file=路径或URL,name=文件名]` — 发送文件
-- `[CQ:face,id=123]` — 发送表情
-- 更多 CQ 码参考 OneBot v11 文档
+**支持的 CQ 码：** `[CQ:at]` · `[CQ:image]` · `[CQ:record]` · `[CQ:video]` · `[CQ:file]` · `[CQ:face]` · 以及更多 OneBot v11 标准 CQ 码
 
-## 下载限制
+---
 
-超过配置体积的媒体不自动下载，只保留 URL，Agent 需要时再下载：
+## ⚙️ 配置
 
-```yaml
-extra:
-  download_limits:
-    image: 10MB       # 支持 B/KB/MB/GB，不区分大小写
-    record: 50MB
-    video: 100MB
-    file: 50MB
-```
-
-## 功能
-
-- 私聊 / 群聊消息收发
-- @提及检测 + 关键词触发
-- 图片、语音、文件收发
-- 回复消息解析
-- 长消息自动拆分 + 合并转发 (群聊，CQ码自动提取为独立普通消息发送)
-- 用户白名单
-- emoji 表情回应 / 戳一戳 (默认关闭)
-
-## 配置
-
-`~/.hermes/config.yaml`：
+在 `~/.hermes/config.yaml` 中添加：
 
 ```yaml
 platforms:
   napcat:
     enabled: true
     extra:
-      # ── 反向 WS 配置 ──
-      reverse_host: "0.0.0.0"          # 监听地址（默认 0.0.0.0）
-      reverse_port: 6700                # 监听端口（默认 6700）
-      access_token: ""                  # 访问令牌（可选，用于认证 NapCat 连接）
+      # ── 连接 ──
+      reverse_host: "0.0.0.0"              # 监听地址
+      reverse_port: 6700                    # 监听端口
+      access_token: ""                      # 访问令牌（可选）
 
       # ── HTTP API（推荐开启）──
-      http_api_url: "http://127.0.0.1:5700"  # OneBot HTTP API 地址
-
-      # ── 机器人信息 ──
-      bot_self_id: ""                   # 机器人 QQ 号（可选，会从消息中自动学习）
-
-      # ── 显示选项 ──
-      show_qq_id: false                 # 是否在用户名后显示 QQ 号（默认 false）
+      http_api_url: "http://127.0.0.1:5700"
 
       # ── 媒体下载限制 ──
-      # 有 file_size 时超限不下载，只保留 URL
-      # 支持 B/KB/MB/GB（不区分大小写）
       download_limits:
-        image: 10MB                     # 图片限制（默认 10MB）
-        record: 10MB                    # 语音限制（默认 10MB）
-        video: 10MB                     # 视频限制（默认 10MB）
-        file: 10MB                      # 文件限制（默认 10MB）
+        image: 10MB                         # 支持 B/KB/MB/GB
+        record: 10MB
+        video: 10MB
+        file: 10MB
 
-      # ── 长消息处理 ──
-      merge_forward_threshold: 800      # 群聊超过此字数触发合并转发（默认 800，私聊不触发）
-      forward_name: "纳西妲"      # 合并转发显示的名字（默认 纳西妲）
+      # ── 长消息 ──
+      merge_forward_threshold: 800          # 群聊超过此字数触发合并转发
+      forward_name: "纳西妲"                 # 合并转发显示名
 
       # ── 引用回复 ──
-      reply_text_max_length: 50         # 解析引用回复消息的最大字数，超出截断用省略号（默认 50）
-                                         # 截断时会保留完整的媒体标签（如 [图片:file=...]），不会在标签中间截断
-                                         # 最大字数受网关限制，目前网关最大为 500 字（v0.15.1）
+      reply_text_max_length: 50             # 引用原文最大字数
 
       # ── 关键词触发 ──
-      # 群聊中匹配这些正则时自动响应（不区分大小写）
-      mention_patterns:
+      mention_patterns:                     # 正则，不区分大小写
         - "纳猫"
         - "帮我"
 
       # ── 用户白名单 ──
-      # 为空或不设置则允许所有用户
-      allowed_qq_ids: "123456,789012"   # 逗号分隔的 QQ 号列表
+      allowed_qq_ids: "123456,789012"       # 逗号分隔，留空=允许所有
 
-      # ── 表情回应 ──
-      emoji_react: false                # 收到消息后随机回应表情（默认 false）
+      # ── 其他 ──
+      show_qq_id: false                     # 用户名后显示 QQ 号
+      emoji_react: false                    # 随机回应表情
+      bot_self_id: ""                        # 机器人 QQ 号（自动学习）
 ```
 
-## 环境变量 (可选)
+<details>
+<summary>🌍 环境变量覆盖</summary>
 
-所有配置项都可以通过环境变量覆盖（环境变量优先级低于 config.yaml）：
+所有配置项都可通过环境变量覆盖（优先级低于 config.yaml）：
 
 ```bash
-# 访问令牌
-NAPCAT_ACCESS_TOKEN=your_token
-
-# HTTP API 地址
-NAPCAT_HTTP_API_URL=http://127.0.0.1:5700
-
-# 机器人 QQ 号
-NAPCAT_BOT_SELF_ID=123456789
-
-# 用户白名单（逗号分隔）
-NAPCAT_ALLOWED_USERS=123456,789012
-
-# 允许所有用户（设置为 true 时忽略白名单）
-NAPCAT_ALLOW_ALL_USERS=false
-
-# 关键词触发（逗号分隔的正则）
-NAPCAT_MENTION_PATTERNS=纳猫,帮我
+NAPCAT_ACCESS_TOKEN=***                  # 访问令牌
+NAPCAT_HTTP_API_URL=http://127.0.0.1:5700  # HTTP API 地址
+NAPCAT_BOT_SELF_ID=123456789             # 机器人 QQ 号
+NAPCAT_ALLOWED_USERS=123456,789012       # 用户白名单
+NAPCAT_ALLOW_ALL_USERS=false             # 允许所有用户
+NAPCAT_MENTION_PATTERNS=纳猫,帮我        # 关键词触发
 ```
+</details>
 
-## NapCat 端配置
+---
 
-在 NapCat 的配置文件中设置反向 WS 连接：
+## 🔗 NapCat 端配置
+
+在 NapCat 配置文件中设置反向 WS 连接：
 
 ```json
 {
@@ -174,11 +234,32 @@ NAPCAT_MENTION_PATTERNS=纳猫,帮我
 }
 ```
 
-如果配置了 `access_token`，NapCat 端也需要设置相同的 token。
+> 如果配置了 `access_token`，NapCat 端也需要设置相同的 token。
 
-## 卸载
+---
+
+## 🗑️ 卸载
 
 ```bash
 rm -rf ~/.hermes/plugins/napcat
 hermes gateway restart
 ```
+
+---
+
+## 🧩 作为 Hermes 插件
+
+本项目是一个 Hermes Agent 平台适配器插件，注册到 Hermes 插件系统后自动生效：
+
+- **插件名：** `napcat`
+- **类型：** `platform`
+- **注册平台：** `napcat` (NapCat QQ)
+- **依赖：** `websockets`
+
+插件入口自动注册平台适配器到 Hermes 网关，无需手动干预。
+
+---
+
+## 📄 许可证
+
+MIT License © [懒大猫](https://github.com/landamao)
