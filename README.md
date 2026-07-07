@@ -11,6 +11,8 @@
 
 *基于 OneBot v11 协议的 QQ 平台适配器，为 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 接入 QQ 生态*
 
+[English](./README_EN.md)
+
 </div>
 
 ---
