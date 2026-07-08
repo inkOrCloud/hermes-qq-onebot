@@ -474,7 +474,7 @@ class _反向WebSocket服务:
         async def _处理连接(ws):
             # ── 认证 ──
             if self._令牌:
-                提取的令牌 = ws.request_headers.get("Authorization", "").removeprefix("Bearer ")
+                提取的令牌 = ws.request.headers.get("Authorization", "").removeprefix("Bearer ")
                 if not 提取的令牌:
                     try:
                         from urllib.parse import parse_qs, urlparse
@@ -642,7 +642,7 @@ class NapCat适配器(BasePlatformAdapter):
     # 连接生命周期
     # ══════════════════════════════════════════════════════════════════
 
-    async def connect(self) -> bool:
+    async def connect(self, *, is_reconnect: bool = False) -> bool:
         """启动反向 WS 服务端，等待 NapCat 连接。"""
         self._反向服务 = _反向WebSocket服务(self._接口调用器, self._处理WS事件)
         await self._反向服务.启动(self._反向主机, self._反向端口, self._访问令牌)
