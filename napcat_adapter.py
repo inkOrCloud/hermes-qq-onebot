@@ -474,7 +474,7 @@ class _反向WebSocket服务:
         async def _处理连接(ws):
             # ── 认证 ──
             if self._令牌:
-                提取的令牌 = ws.request_headers.get("Authorization", "").removeprefix("Bearer ")
+                提取的令牌 = ws.request.headers.get("Authorization", "").removeprefix("Bearer ")
                 if not 提取的令牌:
                     try:
                         from urllib.parse import parse_qs, urlparse
