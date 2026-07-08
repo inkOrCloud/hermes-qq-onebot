@@ -642,7 +642,7 @@ class NapCat适配器(BasePlatformAdapter):
     # 连接生命周期
     # ══════════════════════════════════════════════════════════════════
 
-    async def connect(self) -> bool:
+    async def connect(self, *, is_reconnect: bool = False) -> bool:
         """启动反向 WS 服务端，等待 NapCat 连接。"""
         self._反向服务 = _反向WebSocket服务(self._接口调用器, self._处理WS事件)
         await self._反向服务.启动(self._反向主机, self._反向端口, self._访问令牌)
