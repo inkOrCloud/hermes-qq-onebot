@@ -6,7 +6,7 @@
 
 [![Hermes Plugin](https://img.shields.io/badge/Hermes-Platform%20Plugin-7c3aed?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiPjxwYXRoIGQ9Ik0xMiAyTDIuNSA3djEwTDEyIDIybDkuNS0yVjciLz48L3N2Zz4=)](https://hermes-agent.nousresearch.com/docs)
 [![OneBot v11](https://img.shields.io/badge/OneBot-v11-1677ff?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIi8+PC9zdmc+)](https://github.com/botuniverse/onebot)
-[![Version](https://img.shields.io/badge/version-2.1.3-green)](./plugin.yaml)
+[![Version](https://img.shields.io/badge/version-2.1.4-green)](./plugin.yaml)
 [![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
 *A QQ platform adapter for [Hermes Agent](https://github.com/NousResearch/hermes-agent), built on the OneBot v11 protocol*
@@ -270,6 +270,15 @@ This project is a Hermes Agent platform adapter plugin. Once registered, Hermes 
 - If you expose the reverse WebSocket port beyond localhost, use an `access_token` and firewall rules.
 - Prefer binding to `127.0.0.1` when NapCat and Hermes run on the same machine.
 - Review media download limits before allowing untrusted groups to trigger the agent.
+
+---
+
+## Changelog
+
+### v2.1.4 (2025-07-08)
+
+- Fix `ws.request_headers` compatibility: adapt to websockets 15.x API change (`ws.request.headers`)
+- Fix `connect()` missing `is_reconnect` parameter causing TypeError with newer gateway versions
 
 ---
 

@@ -6,7 +6,7 @@
 
 [![Hermes Plugin](https://img.shields.io/badge/Hermes-Platform%20Plugin-7c3aed?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiPjxwYXRoIGQ9Ik0xMiAyTDIuNSA3djEwTDEyIDIybDkuNS0yVjciLz48L3N2Zz4=)](https://hermes-agent.nousresearch.com/docs)
 [![OneBot v11](https://img.shields.io/badge/OneBot-v11-1677ff?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIi8+PC9zdmc+)](https://github.com/botuniverse/onebot)
-[![Version](https://img.shields.io/badge/version-2.1.3-green)](./plugin.yaml)
+[![Version](https://img.shields.io/badge/version-2.1.4-green)](./plugin.yaml)
 [![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
 *基于 OneBot v11 协议的 QQ 平台适配器，为 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 接入 QQ 生态*
@@ -262,6 +262,15 @@ hermes gateway restart
 - **依赖：** `websockets`
 
 插件入口自动注册平台适配器到 Hermes 网关，无需手动干预。
+
+---
+
+## 📝 更新日志
+
+### v2.1.4 (2025-07-08)
+
+- 修复 `ws.request_headers` 兼容性问题：适配 websockets 15.x API 变更 (`ws.request.headers`)
+- 修复 `connect()` 缺少 `is_reconnect` 参数导致新版 gateway 启动 TypeError
 
 ---
 
